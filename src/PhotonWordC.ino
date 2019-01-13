@@ -195,8 +195,6 @@ void show_time() {
 
     uint8_t minutes_over_five = minute % 5;
 
-    word_string = word_strings_array[WORD_ES]+" "+ word_strings_array[WORD_IST];
-
     clear_all_wc();
 
     if (minute > 24) { hour == 12 ? hour = 1 : hour++; }
@@ -207,11 +205,13 @@ void show_time() {
 
     show_word(WORD_ES);
     show_word(WORD_IST);
+    word_string = word_strings_array[WORD_ES]+" "+ word_strings_array[WORD_IST];
 
     count = 0;
 
     while ((time_str_array[minute/5][count] != 0) && (count < 4)) {
         if (time_str_array[minute/5][count] == HOUR_TOKEN) {
+            count = 3;
             if ((hour == 1) && (minute == 0)) {
                 show_word(WORD_EIN);
                 word_string = word_string+" "+word_strings_array[WORD_EIN];
