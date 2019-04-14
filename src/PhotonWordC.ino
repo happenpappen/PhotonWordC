@@ -10,12 +10,19 @@
 #include "MQTT.h"
 #include "MQTT_credentials.h"
 //#include "WebServer.h"
+#include "particle-dst.h"
 
 #define DATA_PIN_WC D0
 #define DATA_PIN_AM D1
 #define COLOR_ORDER GRB
 
 #define WEBSERVER_PREFIX ""
+
+// For daylight saving time:
+DST dst;
+
+dst_limit_t beginning;
+dst_limit_t end;
 
 ApplicationWatchdog wd(60000, System.reset);
 
@@ -84,6 +91,15 @@ CRGB leds_am[NUM_LEDS_AM];
 String word_string = "";
 
 void mqtt_callback(char *, byte *, unsigned int);
+int incBrightness(String command);
+int decBrightness(String command);
+int getBrightness(String command);
+int setBrightness(String value);
+int setWordclockColor(String command);
+String getWordclockColor();
+int setAmbientColor(String command);
+String getAmbientColor();
+
 
 MQTT client(MQTT_HOST, 1883, mqtt_callback);
 Timer PublisherTimer(5000, publishState);
@@ -95,8 +111,7 @@ unsigned long lastSync = millis();
 
 uint8_t brightness = 255;
 CRGB wc_color = CRGB( 50, 50, 50);
-CRGB am_color = CRGB(255,  0,  0);
-CRGB bg_color = CRGB(  0,  0,  0);
+CRGB am_color = CRGB(255,255,255);
 
 bool displayEnabled = true;
 
@@ -124,8 +139,138 @@ void mqtt_callback(char *topic, byte *payload, unsigned int length)
 
     client.publish("/"+myID+"/state/LastPayload", "Last Payload: " + String(myPayload));
 
+    if (myTopic == "/"+myID+"/set/Brightness") {
+        setBrightness(String(myPayload));
+        stateChanged = true;
+    }
+
+    if (myTopic == "/"+myID+"/set/WordclockColor") {
+        setWordclockColor(String(myPayload));
+        stateChanged = true;
+    }
+
+    if (myTopic == "/"+myID+"/set/AmbientColor") {
+        setAmbientColor(String(myPayload));
+        stateChanged = true;
+    }
+
+    if (stateChanged) {
+        publishState();
+    }
+
     free(myPayload);
     myPayload = NULL;
+}
+
+int incBrightness(String command)
+{
+    brightness++;
+    FastLED.setBrightness(brightness);
+
+    saveSettings();
+    return brightness;
+}
+
+int decBrightness(String command)
+{
+    if (brightness > 0) {
+        brightness--;
+    }
+
+    FastLED.setBrightness(brightness);
+
+    saveSettings();
+    return brightness;
+}
+
+int getBrightness(String command)
+{
+    return brightness;
+}
+
+int setBrightness(String value)
+{
+    brightness = atoi(value);
+    FastLED.setBrightness(brightness);
+
+    saveSettings();
+    return brightness;
+}
+
+String getWordclockColor()
+{
+    return String::format("%0.3d,%0.3d,%0.3d", wc_color.red, wc_color.green, wc_color.blue);
+}
+
+int setWordclockColor(String command)
+{
+    char *rgbstr = (char *) malloc(command.length() + 1);
+
+    rgbstr = strcpy(rgbstr, (const char *) command);
+
+    if (command.length() == 11) {
+        int r = atoi(strsep(&rgbstr, ","));
+        int g = atoi(strsep(&rgbstr, ","));
+        int b = atoi(strsep(&rgbstr, ","));
+
+        wc_color = CRGB(r, g, b);
+    }
+
+    free(rgbstr);
+
+    saveSettings();
+    return 1;
+}
+
+String getAmbientColor()
+{
+    return String::format("%0.3d,%0.3d,%0.3d", am_color.red, am_color.green, am_color.blue);
+}
+
+int setAmbientColor(String command)
+{
+    char *rgbstr = (char *) malloc(command.length() + 1);
+
+    rgbstr = strcpy(rgbstr, (const char *) command);
+
+    if (command.length() == 11) {
+        int r = atoi(strsep(&rgbstr, ","));
+        int g = atoi(strsep(&rgbstr, ","));
+        int b = atoi(strsep(&rgbstr, ","));
+
+        am_color = CRGB(r, g, b);
+    }
+
+    free(rgbstr);
+
+    saveSettings();
+    return 1;
+}
+
+void loadSettings()
+{
+    int address = 1;
+
+    brightness = EEPROM.read(address++);
+    wc_color.r = EEPROM.read(address++);
+    wc_color.g = EEPROM.read(address++);
+    wc_color.b = EEPROM.read(address++);
+    am_color.r = EEPROM.read(address++);
+    am_color.g = EEPROM.read(address++);
+    am_color.b = EEPROM.read(address++);
+}
+
+void saveSettings()
+{
+    int address = 1;
+
+    EEPROM.write(address++, brightness);
+    EEPROM.write(address++, wc_color.r);
+    EEPROM.write(address++, wc_color.g);
+    EEPROM.write(address++, wc_color.b);
+    EEPROM.write(address++, am_color.r);
+    EEPROM.write(address++, am_color.g);
+    EEPROM.write(address++, am_color.b);
 }
 
 void publishState()
@@ -139,18 +284,21 @@ void publishState()
     if (client.isConnected()) {
         client.publish("/"+myID+"/state/FirmwareVersion", System.version());
         client.publish("/"+myID+"/state/Wordstring", word_string);
+        client.publish("/"+myID+"/state/Brightness", String(getBrightness("")));
+        client.publish("/"+myID+"/state/WordclockColor", getWordclockColor());
+        client.publish("/"+myID+"/state/AmbientColor", getAmbientColor());
     }
 }
 
 void clear_all_wc() {
     for (int i = 0; i < NUM_LEDS_WC; i++) {
-        leds_wc[i] = bg_color;
+        leds_wc[i] = CRGB(0,0,0);
     }
 
-    leds_am[minutes_array[1]] = bg_color;
-    leds_am[minutes_array[2]] = bg_color;
-    leds_am[minutes_array[3]] = bg_color;
-    leds_am[minutes_array[4]] = bg_color;
+    leds_am[minutes_array[1]] = CRGB(0,0,0);
+    leds_am[minutes_array[2]] = CRGB(0,0,0);
+    leds_am[minutes_array[3]] = CRGB(0,0,0);
+    leds_am[minutes_array[4]] = CRGB(0,0,0);
 }
 
 void clear_all_am() {
@@ -159,7 +307,7 @@ void clear_all_am() {
         (i != minutes_array[2]) &&
         (i != minutes_array[3]) &&
         (i != minutes_array[4])) {
-            leds_am[i] = bg_color;
+            leds_am[i] = CRGB(0,0,0);
         }
     }
 }
@@ -171,7 +319,7 @@ void show_minutes(uint8_t minutes) {
             if (i <= minutes) {
                 leds_am[minutes_array[i]] = wc_color;
             } else {
-                leds_am[minutes_array[i]] = bg_color;
+                leds_am[minutes_array[i]] = CRGB(0,0,0);
             }
         }
     }
@@ -236,9 +384,22 @@ void show_time() {
 // setup() runs once, when the device is first turned on.
 void setup() {
 
+    Particle.syncTime();
     Time.zone(+1);
 
-    Particle.syncTime();
+    beginning.hour = 2;
+    beginning.day = DST::days::sun;
+    beginning.month = DST::months::mar;
+    beginning.occurrence = -1;
+
+    end.hour = 3;
+    end.day = DST::days::sun;
+    end.month = DST::months::oct;
+    end.occurrence = -1;
+
+    dst.begin(beginning, end, 1);
+    dst.check();
+    dst.automatic(true);
 
     ShowTime_Timer.start();
     PublisherTimer.start();
