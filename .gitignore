@@ -40,3 +40,5 @@ MQTT_credentials.h
 # Debug files
 *.dSYM/
 *.su
+
+\.vscode/ipch/
