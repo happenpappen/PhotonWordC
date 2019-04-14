@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include "PhotonWordC_config.h"
 
-extern CRGB bg_color;
-extern CRGB fg_color;
+extern CRGB am_color;
+extern CRGB wc_color;
 extern CRGB leds_wc[NUM_LEDS_WC];
 extern CRGB leds_am[NUM_LEDS_AM];
 
