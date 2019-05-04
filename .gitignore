@@ -1,7 +1,4 @@
-# NetBeans specific
-nbproject/private/
-build/
-nbbuild/
+.vscode/ipch/*
 
 # Files containing credentials:
 MQTT_credentials.h
