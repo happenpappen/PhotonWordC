@@ -18,6 +18,15 @@
 
 #define WEBSERVER_PREFIX ""
 
+void mqtt_callback(char *topic, byte *payload, unsigned int length);
+void loadSettings();
+void saveSettings();
+void publishState();
+void clear_all_wc();
+void clear_all_am();
+void show_minutes(uint8_t minutes);
+void show_word(uint8_t word);
+
 // For daylight saving time:
 DST dst;
 
